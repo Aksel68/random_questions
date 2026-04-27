@@ -1,17 +1,15 @@
-random_questions/src/drive_client.py
-```
-
-```python
 """Cliente para interactuar con Google Drive API.
 Maneja autenticación OAuth2, descarga de archivos .docx y subida de archivos generados.
 """
-import os
+
 import io
+import os
 import tempfile
 from pathlib import Path
+
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
