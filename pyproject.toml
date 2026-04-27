@@ -1,0 +1,21 @@
+[project]
+name = "random-questions"
+version = "0.1.0"
+description = "Genera múltiples formas de una prueba de alternativas reordenando preguntas y opciones de respuesta."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-docx==1.1.2",
+    "google-api-python-client==2.131.0",
+    "google-auth-oauthlib==1.2.0",
+    "google-auth-httplib2==0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

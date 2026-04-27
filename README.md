@@ -10,11 +10,9 @@ Genera múltiples formas de una prueba de alternativas reordenando preguntas y o
 ## Instalación
 
 1. Clonar el repositorio
-2. Crear entorno virtual e instalar dependencias:
+2. Instalar dependencias con `uv`:
    ```
-   python -m venv venv
-   source venv/bin/activate  # macOS/Linux
-   pip install -r requirements.txt
+   uv sync
    ```
 3. Configurar credenciales de Google Drive (ver `credentials/README.md`)
 
@@ -48,5 +46,5 @@ El archivo .docx debe seguir este formato:
 ## Tests
 
 ```
-python -m pytest tests/ -v
+uv run pytest tests/ -v
 ```
