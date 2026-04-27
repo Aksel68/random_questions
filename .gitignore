@@ -1,8 +1,7 @@
 __pycache__/
 *.pyc
 .env
-credentials/client_secret.json
-credentials/token.json
+credentials/*.json
 venv/
 *.egg-info/
 dist/
