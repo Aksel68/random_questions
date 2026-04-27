@@ -8,6 +8,7 @@ Ejemplo:
 """
 
 import os
+import shutil
 import sys
 import tempfile
 
@@ -82,7 +83,7 @@ def main():
 
             os.unlink(form_path)
 
-        os.rmdir(temp_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     finally:
         if os.path.exists(local_path):
