@@ -19,13 +19,13 @@ Genera múltiples formas de una prueba de alternativas reordenando preguntas y o
 ## Uso
 
 ```
-python -m src.main "<ruta_en_drive>" <n_formas>
+uv run python -m src.main "<ruta_en_drive>" <n_formas>
 ```
 
 ### Ejemplo
 
 ```
-python -m src.main "Guías/Ondas 2026. Ev. 1 F1.docx" 4
+uv run python -m src.main "Guías/Ondas 2026. Ev. 1 F1.docx" 4
 ```
 
 Esto genera 4 archivos en la misma carpeta de Drive:
