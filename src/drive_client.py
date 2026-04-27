@@ -16,8 +16,18 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 CREDENTIALS_DIR = Path(__file__).parent.parent / "credentials"
-CLIENT_SECRET_PATH = CREDENTIALS_DIR / "client_secret.json"
 TOKEN_PATH = CREDENTIALS_DIR / "token.json"
+
+
+def _find_client_secret() -> Path:
+    """Busca cualquier archivo client_secret*.json en el directorio de credenciales."""
+    matches = list(CREDENTIALS_DIR.glob("client_secret*.json"))
+    if not matches:
+        raise FileNotFoundError(
+            f"No se encontró ningún archivo client_secret*.json en {CREDENTIALS_DIR}. "
+            f"Seguí las instrucciones en credentials/README.md para obtener las credenciales."
+        )
+    return matches[0]
 
 
 def _authenticate() -> Credentials:
@@ -31,13 +41,9 @@ def _authenticate() -> Credentials:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            if not CLIENT_SECRET_PATH.exists():
-                raise FileNotFoundError(
-                    f"No se encontró {CLIENT_SECRET_PATH}. "
-                    f"Seguí las instrucciones en credentials/README.md para obtener las credenciales."
-                )
+            client_secret_path = _find_client_secret()
             flow = InstalledAppFlow.from_client_secrets_file(
-                str(CLIENT_SECRET_PATH), SCOPES
+                str(client_secret_path), SCOPES
             )
             creds = flow.run_local_server(port=0)
 
