@@ -108,6 +108,41 @@ def download_docx(drive_path: str) -> str:
     return temp_file.name
 
 
+def download_sheet_as_csv(drive_path: str) -> str:
+    """Descarga un Google Sheet nativo y lo retorna como string CSV.
+
+    Los Google Sheets nativos no se pueden descargar con get_media —
+    requieren export_media con un MIME type de exportación.
+
+    Args:
+        drive_path: Ruta en Drive (ej: "Guías/Claves Ondas 2026. Ev. 1 F1").
+                    Sin extensión — los Google Sheets nativos no tienen.
+
+    Returns:
+        String con el contenido CSV del sheet.
+
+    Raises:
+        FileNotFoundError: Si no se encuentra el archivo en Drive.
+    """
+    service = _get_service()
+    file_id = _resolve_path(service, drive_path)
+
+    request = service.files().export_media(
+        fileId=file_id,
+        mimeType="text/csv",
+    )
+
+    buffer = io.BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+
+    csv_content = buffer.getvalue().decode("utf-8")
+    print(f"✅ Pauta descargada: {drive_path}")
+    return csv_content
+
+
 def upload_docx(local_path: str, drive_folder_path: str, filename: str) -> str:
     """Sube un archivo .docx a una carpeta específica en Google Drive."""
     service = _get_service()
@@ -130,4 +165,38 @@ def upload_docx(local_path: str, drive_folder_path: str, filename: str) -> str:
     )
 
     print(f"✅ Subido: {filename}")
+    return file.get("id")
+
+
+def upload_xlsx(local_path: str, drive_folder_path: str, filename: str) -> str:
+    """Sube un archivo .xlsx a una carpeta en Google Drive.
+
+    Args:
+        local_path: Ruta local al .xlsx.
+        drive_folder_path: Ruta de la carpeta destino en Drive.
+        filename: Nombre del archivo en Drive.
+
+    Returns:
+        ID del archivo creado en Drive.
+    """
+    service = _get_service()
+
+    if drive_folder_path:
+        parent_id = _resolve_path(service, drive_folder_path)
+    else:
+        parent_id = "root"
+
+    file_metadata = {"name": filename, "parents": [parent_id]}
+    media = MediaFileUpload(
+        local_path,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    file = (
+        service.files()
+        .create(body=file_metadata, media_body=media, fields="id")
+        .execute()
+    )
+
+    print(f"✅ Pauta subida: {filename}")
     return file.get("id")
