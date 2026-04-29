@@ -45,7 +45,11 @@ def extract_form_number(filename: str) -> tuple[str, int]:
     """
     import re
 
-    base_name = filename.rsplit(".docx", 1)[0]
+    base_name = filename
+    for ext in (".docx", ".xlsx"):
+        if base_name.lower().endswith(ext):
+            base_name = base_name[: -len(ext)]
+            break
     match = re.search(r"^(.*\bF)(\d+)$", base_name)
     if not match:
         raise ValueError(
@@ -76,7 +80,11 @@ def derive_answer_key_path(drive_path: str) -> str:
     filename = path_parts[-1]
     folder = "/".join(path_parts[:-1])
 
-    base_name = filename.rsplit(".docx", 1)[0]
+    base_name = filename
+    for ext in (".docx", ".xlsx"):
+        if base_name.lower().endswith(ext):
+            base_name = base_name[: -len(ext)]
+            break
     claves_name = f"Claves {base_name}"
 
     if folder:

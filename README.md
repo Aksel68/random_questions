@@ -29,18 +29,23 @@ uv run python -m src.main "Guías/Ondas 2026. Ev. 1 F1.docx" 4
 ```
 
 Esto genera 4 archivos en la misma carpeta de Drive:
-- `Ondas 2026. Ev. 1 F1 Forma A.docx`
-- `Ondas 2026. Ev. 1 F1 Forma B.docx`
-- `Ondas 2026. Ev. 1 F1 Forma C.docx`
-- `Ondas 2026. Ev. 1 F1 Forma D.docx`
+- `Ondas 2026. Ev. 1 F2.docx`
+- `Ondas 2026. Ev. 1 F3.docx`
+- `Ondas 2026. Ev. 1 F4.docx`
+- `Ondas 2026. Ev. 1 F5.docx`
+
+Cada archivo generado contiene el texto "Forma N" actualizado
+según su número de forma.
 
 ## Formato del archivo de entrada
 
 El archivo .docx debe seguir este formato:
+- **Nombre del archivo:** Debe terminar en `F<número>.docx` (ej: `F1.docx`, `F2.docx`)
 - **Preguntas:** Empiezan con `N-` (ej: `1-`, `2-`, `10-`)
 - **Alternativas:** Empiezan con `x)` (ej: `a)`, `b)`, `c)`)
 - Las preguntas pueden incluir imágenes en el enunciado
 - Las alternativas pueden incluir imágenes
+- El documento debe contener un texto "Forma N" debajo del título
 - Todo lo que aparece antes de la primera pregunta se considera encabezado y se preserva
 
 ## Tests
