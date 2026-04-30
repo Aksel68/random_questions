@@ -74,3 +74,9 @@ class Exam:
     questions: list[Question] = field(default_factory=list)
     questions_table_index: int = 2
     questions_per_row: int = 2
+    pre_table_body_elements: list = field(
+        default_factory=list
+    )  # elementos XML del body ANTES de la tabla de preguntas
+    post_table_body_elements: list = field(
+        default_factory=list
+    )  # elementos XML del body DESPUÉS de la tabla de preguntas

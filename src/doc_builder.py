@@ -445,10 +445,13 @@ def build_docx(
     # 6. Calcular ancho máximo de imagen por columna desde <w:tblGrid>
     col_widths_emu = _get_column_widths_emu(questions_table)
 
-    # 7. Capturar contenido del body después de la tabla de preguntas
+    # 7. Capturar contenido del body antes y después de la tabla de preguntas
     #    (texto de cierre, imágenes, sectPr) para preservarlo tras modificaciones
     body = doc.element.body
     table_element = questions_table._tbl
+    # Registrar el índice exacto de la tabla en el body para poder reinsertarla
+    # defensivamente si alguna operación la desanclara accidentalmente
+    table_body_index = list(body).index(table_element)
     tail_elements = []
     found_table = False
     for child in list(body):
@@ -481,10 +484,16 @@ def build_docx(
 
             q_index += 1
 
-    # 9. Re-asegurar que el contenido posterior a la tabla sigue en el body
-    for elem in tail_elements:
-        if elem.getparent() is None:
-            body.append(elem)
+    # 9. Re-asegurar que la tabla y el contenido posterior siguen en el body
+    #    en el orden correcto. La tabla ya fue modificada in-place, así que
+    #    solo actuamos si fue removida accidentalmente del body.
+    body_children = list(body)
+    if table_element not in body_children:
+        # La tabla fue removida accidentalmente — reinsertarla en su posición original
+        if table_body_index <= len(body_children):
+            body.insert(table_body_index, table_element)
+        else:
+            body.append(table_element)
 
     # 10. Guardar
     doc.save(output_path)

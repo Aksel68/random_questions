@@ -23,6 +23,18 @@ from src.models import Alternative, Exam, Question
 # Namespace de Word XML
 NSMAP = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 
+# Frases que marcan el inicio del ítem de alternativas (case-insensitive, coincidencia parcial)
+_ALTERNATIVE_MARKERS = (
+    "marque la alternativa",
+    "marca la alternativa",
+    "seleccione la alternativa",
+    "selecciona la alternativa",
+)
+
+# Tag local para párrafo y tabla en el body del documento
+_W_P_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
+_W_TBL_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"
+
 # Regex para detectar inicio de pregunta: "N-" o "N." donde N es uno o más dígitos
 QUESTION_PATTERN = re.compile(r"^(\d+)\s*[-–—.]\s*")
 
@@ -70,24 +82,54 @@ def _paragraph_has_image(p_element) -> bool:
     return False
 
 
-def _find_questions_table(doc: Document) -> tuple[int, "Table"]:
-    """Encuentra la tabla que contiene las preguntas del examen.
+def _find_questions_table_smart(doc: Document):
+    """Encuentra la tabla de preguntas usando detección inteligente por marcador.
 
-    Heurística: es la tabla con más filas (la tabla de preguntas siempre
-    tiene muchas más filas que las tablas de datos/instrucciones).
+    Estrategia principal: recorre el body del documento en orden buscando un
+    párrafo que contenga alguna de las frases marcadoras definidas en
+    _ALTERNATIVE_MARKERS (case-insensitive). La primera tabla que aparezca
+    *después* de ese párrafo es considerada la tabla de preguntas.
+
+    Fallback: si no se encuentra el marcador, usa la heurística de la tabla con
+    más filas (comportamiento idéntico a la función original).
 
     Args:
         doc: Documento python-docx.
 
     Returns:
-        Tupla (índice_tabla, objeto_tabla).
+        Tupla (índice_tabla_en_doc.tables, objeto_tabla).
 
     Raises:
-        ValueError: Si no se encuentran tablas en el documento.
+        ValueError: Si el documento no contiene tablas.
     """
     if not doc.tables:
         raise ValueError("El documento no contiene tablas.")
 
+    body = doc.element.body
+    found_marker = False
+
+    for child in body:
+        tag = child.tag if isinstance(child.tag, str) else ""
+
+        # Es un párrafo — buscar el marcador si aún no lo hemos encontrado
+        if tag == _W_P_TAG and not found_marker:
+            text = _get_paragraph_text(child).lower()
+            if any(marker in text for marker in _ALTERNATIVE_MARKERS):
+                found_marker = True
+
+        # Es una tabla — si ya encontramos el marcador, esta es la tabla de preguntas
+        elif tag == _W_TBL_TAG and found_marker:
+            # Buscar el índice de esta tabla dentro de doc.tables comparando por identidad
+            for idx, table in enumerate(doc.tables):
+                if table._tbl is child:
+                    return idx, table
+
+    # Fallback: heurística de tabla con más filas
+    markers_display = ", ".join(f'"{m}"' for m in _ALTERNATIVE_MARKERS)
+    print(
+        f"⚠️  No se encontró ninguna frase marcadora ({markers_display}). "
+        "Usando heurística de tabla más grande."
+    )
     max_rows = 0
     best_idx = 0
     for i, table in enumerate(doc.tables):
@@ -210,7 +252,7 @@ def parse_docx(file_path: str) -> Exam:
     """
     doc = Document(file_path)
 
-    table_idx, questions_table = _find_questions_table(doc)
+    table_idx, questions_table = _find_questions_table_smart(doc)
 
     questions: List[Question] = []
 
@@ -223,9 +265,26 @@ def parse_docx(file_path: str) -> Exam:
     # Determinar preguntas por fila
     cols_count = len(questions_table.columns) if questions_table.columns else 2
 
+    # Recopilar elementos del body antes y después de la tabla de preguntas
+    questions_tbl_element = questions_table._tbl
+    pre_elements = []
+    post_elements = []
+    found_table = False
+
+    for child in doc.element.body:
+        if child is questions_tbl_element:
+            found_table = True
+            continue  # excluir la tabla misma
+        if found_table:
+            post_elements.append(deepcopy(child))
+        else:
+            pre_elements.append(deepcopy(child))
+
     return Exam(
         source_path=file_path,
         questions=questions,
         questions_table_index=table_idx,
         questions_per_row=cols_count,
+        pre_table_body_elements=pre_elements,
+        post_table_body_elements=post_elements,
     )

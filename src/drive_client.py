@@ -2,6 +2,7 @@
 Maneja autenticación OAuth2, descarga de archivos .docx y subida de archivos generados.
 """
 
+import csv
 import io
 import os
 import tempfile
@@ -18,9 +19,13 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 CREDENTIALS_DIR = Path(__file__).parent.parent / "credentials"
 TOKEN_PATH = CREDENTIALS_DIR / "token.json"
 
+MIME_GDOC = "application/vnd.google-apps.document"
+MIME_GSHEET = "application/vnd.google-apps.spreadsheet"
+MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 
 def _find_client_secret() -> Path:
-    """Busca cualquier archivo client_secret*.json en el directorio de credenciales."""
     matches = list(CREDENTIALS_DIR.glob("client_secret*.json"))
     if not matches:
         raise FileNotFoundError(
@@ -31,7 +36,6 @@ def _find_client_secret() -> Path:
 
 
 def _authenticate() -> Credentials:
-    """Autentica con Google y devuelve credenciales válidas."""
     creds = None
 
     if TOKEN_PATH.exists():
@@ -55,7 +59,6 @@ def _authenticate() -> Credentials:
 
 
 def _get_service():
-    """Obtiene una instancia del servicio de Google Drive API."""
     creds = _authenticate()
     return build("drive", "v3", credentials=creds)
 
@@ -90,6 +93,118 @@ def _resolve_path(service, path: str) -> str:
     return parent_id
 
 
+def get_file_mime_type(drive_path: str) -> str:
+    """Consulta y retorna el mimeType de un archivo en Google Drive."""
+    service = _get_service()
+    file_id = _resolve_path(service, drive_path)
+
+    file_metadata = service.files().get(fileId=file_id, fields="mimeType").execute()
+
+    return file_metadata["mimeType"]
+
+
+def download_file_as_docx(drive_path: str) -> str:
+    """Descarga cualquier archivo de Drive como .docx local.
+
+    Soporta:
+    - Google Docs nativos (MIME_GDOC): exporta a .docx via export_media.
+    - Archivos Word nativos (MIME_DOCX): descarga directamente via get_media.
+    - Cualquier otro tipo: lanza ValueError.
+
+    Retorna la ruta al archivo temporal .docx.
+    """
+    service = _get_service()
+    file_id = _resolve_path(service, drive_path)
+
+    file_metadata = service.files().get(fileId=file_id, fields="mimeType").execute()
+    mime_type = file_metadata["mimeType"]
+
+    temp_file = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+
+    if mime_type == MIME_GDOC:
+        request = service.files().export_media(
+            fileId=file_id,
+            mimeType=MIME_DOCX,
+        )
+    elif mime_type == MIME_DOCX:
+        request = service.files().get_media(fileId=file_id)
+    else:
+        temp_file.close()
+        os.unlink(temp_file.name)
+        raise ValueError(
+            f"Tipo de archivo no soportado para descarga como .docx: '{mime_type}'. "
+            f"Se esperaba un Google Doc ({MIME_GDOC}) o un archivo Word ({MIME_DOCX})."
+        )
+
+    downloader = MediaIoBaseDownload(temp_file, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+
+    temp_file.close()
+    print(f"✅ Archivo descargado: {drive_path}")
+    return temp_file.name
+
+
+def download_answer_key_as_csv(drive_path: str) -> str:
+    """Descarga la pauta de respuestas como string CSV.
+
+    Soporta:
+    - Google Sheets nativos (MIME_GSHEET): exporta a CSV via export_media.
+    - Archivos Excel nativos (MIME_XLSX): descarga y convierte a CSV con openpyxl.
+    - Cualquier otro tipo: lanza ValueError.
+
+    Retorna el contenido CSV como string.
+    """
+    import openpyxl
+
+    service = _get_service()
+    file_id = _resolve_path(service, drive_path)
+
+    file_metadata = service.files().get(fileId=file_id, fields="mimeType").execute()
+    mime_type = file_metadata["mimeType"]
+
+    buffer = io.BytesIO()
+
+    if mime_type == MIME_GSHEET:
+        request = service.files().export_media(
+            fileId=file_id,
+            mimeType="text/csv",
+        )
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
+        csv_content = buffer.getvalue().decode("utf-8")
+
+    elif mime_type == MIME_XLSX:
+        request = service.files().get_media(fileId=file_id)
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
+        wb = openpyxl.load_workbook(io.BytesIO(buffer.getvalue()))
+        ws = wb.active
+        if ws is None:
+            raise ValueError("El archivo Excel no contiene hojas activas.")
+        output = io.StringIO()
+        writer = csv.writer(output)
+        for row in ws.iter_rows(values_only=True):
+            writer.writerow([str(c) if c is not None else "" for c in row])
+        csv_content = output.getvalue()
+
+    else:
+        raise ValueError(
+            f"Tipo de archivo no soportado para descarga como CSV: '{mime_type}'. "
+            f"Se esperaba un Google Sheet ({MIME_GSHEET}) o un archivo Excel ({MIME_XLSX})."
+        )
+
+    print(f"✅ Pauta descargada: {drive_path}")
+    return csv_content
+
+
 def download_docx(drive_path: str) -> str:
     """Descarga un archivo .docx desde Google Drive a un archivo temporal local."""
     service = _get_service()
@@ -109,21 +224,7 @@ def download_docx(drive_path: str) -> str:
 
 
 def download_sheet_as_csv(drive_path: str) -> str:
-    """Descarga un Google Sheet nativo y lo retorna como string CSV.
-
-    Los Google Sheets nativos no se pueden descargar con get_media —
-    requieren export_media con un MIME type de exportación.
-
-    Args:
-        drive_path: Ruta en Drive (ej: "Guías/Claves Ondas 2026. Ev. 1 F1").
-                    Sin extensión — los Google Sheets nativos no tienen.
-
-    Returns:
-        String con el contenido CSV del sheet.
-
-    Raises:
-        FileNotFoundError: Si no se encuentra el archivo en Drive.
-    """
+    """Descarga un Google Sheet nativo y lo retorna como string CSV."""
     service = _get_service()
     file_id = _resolve_path(service, drive_path)
 
@@ -155,7 +256,7 @@ def upload_docx(local_path: str, drive_folder_path: str, filename: str) -> str:
     file_metadata = {"name": filename, "parents": [parent_id]}
     media = MediaFileUpload(
         local_path,
-        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        mimetype=MIME_DOCX,
     )
 
     file = (
@@ -169,16 +270,7 @@ def upload_docx(local_path: str, drive_folder_path: str, filename: str) -> str:
 
 
 def upload_xlsx(local_path: str, drive_folder_path: str, filename: str) -> str:
-    """Sube un archivo .xlsx a una carpeta en Google Drive.
-
-    Args:
-        local_path: Ruta local al .xlsx.
-        drive_folder_path: Ruta de la carpeta destino en Drive.
-        filename: Nombre del archivo en Drive.
-
-    Returns:
-        ID del archivo creado en Drive.
-    """
+    """Sube un archivo .xlsx a una carpeta en Google Drive."""
     service = _get_service()
 
     if drive_folder_path:
@@ -189,7 +281,7 @@ def upload_xlsx(local_path: str, drive_folder_path: str, filename: str) -> str:
     file_metadata = {"name": filename, "parents": [parent_id]}
     media = MediaFileUpload(
         local_path,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mimetype=MIME_XLSX,
     )
 
     file = (
