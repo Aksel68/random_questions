@@ -70,6 +70,11 @@ def generate_answer_key(
     new_key: dict[int, str] = {}
 
     for q in questions:
+        if q.original_number not in original_key:
+            raise KeyError(
+                f"Falta la respuesta de la pregunta original {q.original_number} "
+                f"(pregunta {q.number} en la forma generada)."
+            )
         correct_original_letter = original_key[q.original_number]
 
         new_letter = None

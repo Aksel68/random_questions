@@ -11,6 +11,7 @@ from src.answer_key import (
     generate_answer_key,
     parse_answer_key_csv,
 )
+from src.main import _complete_answer_key_or_none, _parse_local_xlsx_answer_key
 
 from src.models import Alternative, Question
 
@@ -143,8 +144,66 @@ class TestGenerateAnswerKey:
                 ("d", "d"),
             ],
         )
-        with pytest.raises(KeyError):
+        with pytest.raises(KeyError, match="pregunta original 99"):
             generate_answer_key([q], original_key)
+
+
+class TestAnswerKeyCoverage:
+    def test_incomplete_key_is_skipped_with_missing_question_numbers(self, capsys):
+        questions = [
+            _make_question(1, 1, [("a", "a")]),
+            _make_question(2, 2, [("a", "a")]),
+        ]
+
+        result = _complete_answer_key_or_none({1: "a"}, questions)
+
+        assert result is None
+        assert "preguntas originales: 2" in capsys.readouterr().out
+
+    def test_empty_key_is_skipped(self, capsys):
+        question = _make_question(1, 1, [("a", "a")])
+
+        result = _complete_answer_key_or_none({}, [question])
+
+        assert result is None
+        assert "no contiene respuestas válidas" in capsys.readouterr().out
+
+    def test_complete_key_is_preserved(self):
+        question = _make_question(1, 1, [("a", "a")])
+        answer_key = {1: "a"}
+
+        assert _complete_answer_key_or_none(answer_key, [question]) == answer_key
+
+
+class TestParseLocalXlsxAnswerKey:
+    def test_parses_integer_question_numbers_stored_as_floats(self):
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            path = f.name
+        try:
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.append(["Pregunta", "Respuesta"])
+            sheet.append([1.0, "b"])
+            sheet.append([17.0, "c"])
+            workbook.save(path)
+
+            assert _parse_local_xlsx_answer_key(path) == {1: "b", 17: "c"}
+        finally:
+            os.unlink(path)
+
+    def test_skips_non_integer_question_numbers(self):
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            path = f.name
+        try:
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.append(["Pregunta", "Respuesta"])
+            sheet.append([17.5, "c"])
+            workbook.save(path)
+
+            assert _parse_local_xlsx_answer_key(path) == {}
+        finally:
+            os.unlink(path)
 
 
 class TestBuildAnswerKeyXlsx:

@@ -24,6 +24,8 @@ import shutil
 import sys
 import tempfile
 
+from src.models import Question
+
 # ---------------------------------------------------------------------------
 # Helpers de nombre de archivo
 # ---------------------------------------------------------------------------
@@ -162,9 +164,39 @@ def _parse_local_xlsx_answer_key(xlsx_path: str) -> dict[int, str]:
         if q_raw is None or a_raw is None:
             continue
         try:
-            answer_key[int(str(q_raw))] = str(a_raw).strip().lower()
+            question_number = float(q_raw)
+            if not question_number.is_integer():
+                continue
+            answer_key[int(question_number)] = str(a_raw).strip().lower()
         except (ValueError, TypeError):
             continue
+
+    return answer_key
+
+
+def _complete_answer_key_or_none(
+    answer_key: dict[int, str] | None, questions: list[Question]
+) -> dict[int, str] | None:
+    """Descarta pautas vacías o incompletas para evitar generar claves incorrectas."""
+    if answer_key is None:
+        return None
+    if not answer_key:
+        print(
+            "⚠️  La pauta no contiene respuestas válidas. "
+            "Se generarán las formas sin pautas.\n"
+        )
+        return None
+
+    missing = sorted(
+        {q.original_number for q in questions if q.original_number not in answer_key}
+    )
+    if missing:
+        missing_list = ", ".join(str(number) for number in missing)
+        print(
+            f"⚠️  La pauta está incompleta; faltan respuestas para las preguntas "
+            f"originales: {missing_list}. Se generarán las formas sin pautas.\n"
+        )
+        return None
 
     return answer_key
 
@@ -242,6 +274,8 @@ def main():
         if not exam.questions:
             print("❌ No se detectaron preguntas en el documento.")
             sys.exit(1)
+
+        original_key = _complete_answer_key_or_none(original_key, exam.questions)
 
         # Generar formas
         print("🎲 Generando formas aleatorias...")
@@ -331,6 +365,8 @@ def main():
                 )
             except ValueError as e:
                 print(f"⚠️  Tipo de archivo de pauta no soportado: {e}\n")
+
+            original_key = _complete_answer_key_or_none(original_key, exam.questions)
 
             # 4. Generar formas aleatorias
             print("🎲 Generando formas aleatorias...")
